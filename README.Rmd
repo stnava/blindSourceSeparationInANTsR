@@ -7,7 +7,7 @@ output: html_document
 
 # blindSourceSeparationInANTsR
 
-play around with simple blind source separation examples with images.   see results via [this link](https://htmlpreview.github.io/?https://github.com/stnava/blindSourceSeparationInANTsR/blob/master/README.html).
+play around with simple blind source separation examples with images.   see results via [this link](https://stnava.github.io/blindSourceSeparationInANTsR/)
 
 ```{r simulateData}
 library( ANTsR )
@@ -126,7 +126,7 @@ print( paste("sparseness3",sum(abs(eanat[3,])>0)/sum(mask==1) ))
 
 Try some neuroimaging data.
 
-```{r nimgdata,eval=FALSE}
+```{r nimgdata,eval=TRUE}
 boldfn = getANTsRData( "rsbold" )
 bold   = antsImageRead( boldfn )
 sbold  = smoothImage( bold, c( rep(6,3),1),
@@ -138,10 +138,10 @@ plot( boldavg, axis=3 )
 
 Now set up dim red.
 
-```{r boldmat,eval=FALSE}
+```{r boldmat,eval=TRUE}
 set.seed( 11 )
 bmat = timeseries2matrix( sbold, bmsk )
-cc   = compcor( bmat, 12 )
+cc   = compcor( bmat, 20, variance_extreme = 0.1 )
 rbmat = residuals( lm( bmat ~ cc ) )
 nc   = 10
 bica = fastICA( t( rbmat ), nc )
@@ -149,7 +149,7 @@ bica = fastICA( t( rbmat ), nc )
 
 View a component.
 
-```{r viewicabold,eval=FALSE}
+```{r viewicabold,eval=TRUE}
 k = 9
 bicaVec = bica$S[,k]
 bicaVec = bicaVec * sign( quantile( bicaVec )[3] )
@@ -162,21 +162,21 @@ plot( boldavg, bicaImg , window.overlay=c(0.1,1), axis=3 )
 
 Eanat with this data.
 
-```{r boldEanat,eval=FALSE}
-sparsenessParam = (range( abs( bica$S ) ) * 0.0001 )[ 2 ] 
+```{r boldEanat,eval=TRUE}
+sparsenessParam = (range( abs( bica$S ) ) * 0.00001 )[ 2 ] 
 eanat<-eanatDef( 
     inmat      = scale( rbmat ),
     mask       = bmsk, 
     smoother   = 1.0,
     cthresh    = 10,
-    positivity = FALSE, its=25,
+    positivity = FALSE,
     priors     = t(bica$S), verbose=T, priorWeight = 0.5,
     sparEpsilon = sparsenessParam ) 
 ```
 
 View  all of the Eanat components in BOLD space.
 
-```{r boldEanatView,eval=FALSE}
+```{r boldEanatView,eval=TRUE}
 for ( k in 1:nc )
   {
   tempvec = eanat[k,]
