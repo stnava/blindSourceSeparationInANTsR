@@ -72,18 +72,24 @@ and use eanat to refine the results.
 ################
 initlist<-list()
 for ( i in 1:nc ) {
-  initlist[[ i ]] = makeImage( mask, myica2$S[, i] )
+  initlist[[ i ]] = makeImage( mask, myica2$S[, i]*-1 )
 }
-eanat<-sparseDecom( 
-  inmatrix   = scale(ica.mat), 
-  inmask     = mask,  
-  sparseness = -0.5, 
-  nvecs      = nc, 
-  smooth     = 0.5, 
-  cthresh    = 100,
-  mycoption  = 2,   # this controls orthogonality constraints
+sicamat = scale(ica.mat)
+eanatStruct <- sparseDecom( 
+  inmatrix   = sicamat, 
+  inmask     = mask,
+  sparseness = -0.5, # set this explicitly, negative
+  # values allow signed pseudo-eigenvectors in results
+  nvecs      = nc,
+  smooth     = 3,  # components will be smooth
+  # negative values use edge-preserving methods (WIP)
+  cthresh    = 500,  # get large components
+  its        = 20,   # optimize for a "long" time
+  mycoption  = 0,    # this controls orthogonality constraints
+  # leave as exercise to test other options
   initializationList = initlist,
-  priorWeight = 1 )$eigenanatomyimages 
+  priorWeight = 10 )
+eanat = eanatStruct$eigenanatomyimages 
 emat1 = matrix( eanat[1,], nrow = 100 ) 
 print( paste("sparseness1",sum(abs(eanat[1,])>0)/sum(mask==1) ))
 image( emat1 )
@@ -96,14 +102,15 @@ print( paste("sparseness3",sum(abs(eanat[3,])>0)/sum(mask==1) ))
 ```
 
 Use our deflation-based algorithm which has fewer 
-necessary parameters.
+necessary parameters and appears to be more stable 
+in this example.
 
 ```{r tryDefEanatWithICA}
 sparsenessParam = (range( abs( myica2$S ) ) * 0.002 )[ 2 ] 
 eanat<-eanatDef( 
     inmat      = scale( ica.mat ),
     mask       = mask, 
-    smoother   = 1.0,
+    smoother   = 3.0,
     priors     = t(myica2$S),
     sparEpsilon = sparsenessParam ) 
 emat1 = matrix( eanat[1,], nrow = 100 ) 
@@ -117,3 +124,66 @@ image( emat3 )
 print( paste("sparseness3",sum(abs(eanat[3,])>0)/sum(mask==1) ))
 ```
 
+Try some neuroimaging data.
+
+```{r nimgdata}
+boldfn = getANTsRData( "rsbold" )
+bold   = antsImageRead( boldfn )
+sbold  = smoothImage( bold, c( rep(6,3),1),
+  sigmaInPhysicalCoordinates = TRUE, FWHM = TRUE )
+boldavg = getAverageOfTimeSeries( bold )
+bmsk   = getMask( boldavg )
+plot( boldavg, axis=3 )
+```
+
+Now set up dim red.
+
+```{r boldmat}
+bmat = timeseries2matrix( sbold, bmsk )
+cc   = compcor( bmat, 12 )
+rbmat = residuals( lm( bmat ~ cc ) )
+nc   = 10
+bica = fastICA( t( rbmat ), nc )
+```
+
+View a component.
+
+```{r viewicabold}
+k = 9
+bicaVec = bica$S[,k]
+bicaVec = bicaVec * sign( quantile( bicaVec )[3] )
+qbv     = quantile( bicaVec,  0.99 )
+bicaVec[ bicaVec > qbv ] = qbv
+bicaImg = makeImage( bmsk, bicaVec ) / qbv
+plot( boldavg, bicaImg , window.overlay=c(0.1,1), axis=3 )
+```
+
+
+Eanat with this data.
+
+```{r boldEanat}
+sparsenessParam = (range( abs( bica$S ) ) * 0.0001 )[ 2 ] 
+eanat<-eanatDef( 
+    inmat      = scale( rbmat ),
+    mask       = bmsk, 
+    smoother   = 0.5,
+    cthresh    = 10,
+    positivity = TRUE,
+    priors     = t(bica$S), verbose=T, priorWeight = 0.5,
+    sparEpsilon = sparsenessParam ) 
+```
+
+View  all of the Eanat components in BOLD space.
+
+```{r boldEanatView}
+for ( k in 1:nc )
+  {
+  print( range(eanat[k,] ) )
+  eimg = makeImage( bmsk, eanat[k,]) / max( eanat[k,] )
+  print( k )
+  plot( boldavg, eimg , window.overlay=c(0.1,1), axis=3 )
+  Sys.sleep( 2 )
+  }
+```
+
+Done!
