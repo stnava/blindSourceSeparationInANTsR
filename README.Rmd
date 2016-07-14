@@ -44,6 +44,16 @@ mask = makeImage( c(100,100), 1 )
 ilist = matrixToImages( ica.mat, mask )
 ```
 
+Let us look at the raw images.
+
+```{r viewimages}
+ct = 1
+for ( i in ilist ) {
+  print( paste( "Image", ct ) )
+  plot( i ); ct = ct + 1
+}
+```
+
 Run ICA on the matrix.
 
 ```{r tryICA}
@@ -71,7 +81,7 @@ eanat<-sparseDecom(
   nvecs      = nc, 
   smooth     = 0.5, 
   cthresh    = 100,
-  mycoption  = 0, 
+  mycoption  = 2,   # this controls orthogonality constraints
   initializationList = initlist,
   priorWeight = 1 )$eigenanatomyimages 
 emat1 = matrix( eanat[1,], nrow = 100 ) 
