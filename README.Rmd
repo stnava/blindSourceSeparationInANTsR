@@ -7,7 +7,7 @@ output: html_document
 
 # blindSourceSeparationInANTsR
 
-play around with simple blind source separation examples with images.   see results via [this link](https://stnava.github.io/blindSourceSeparationInANTsR/)
+play around with simple blind source separation examples with images.   see results via [this link](https://htmlpreview.github.io/?https://github.com/stnava/blindSourceSeparationInANTsR/blob/master/README.html).
 
 ```{r simulateData}
 library( ANTsR )
@@ -58,6 +58,7 @@ Run ICA on the matrix.
 
 ```{r tryICA}
 nc = 3
+mysvd <- svd( scale(ica.mat), nu=0, nv=nc )$v
 myica2 <- fastICA( t( ica.mat ), n.comp = nc, verbose = F )
 image(matrix(myica2$S[, nc], nrow=100, byrow=F))
 image(matrix(myica2$S[, 2], nrow=100, byrow=F))
@@ -124,6 +125,29 @@ image( emat3 )
 print( paste("sparseness3",sum(abs(eanat[3,])>0)/sum(mask==1) ))
 ```
 
+
+
+Use our deflation-based algorithm with SVD-based initialization.
+
+```{r tryDefEanatWithSVD}
+sparsenessParam = (range( abs( mysvd ) ) * 0.01 )[ 2 ] 
+eanat<-eanatDef( 
+    inmat      = scale( ica.mat ),
+    mask       = mask, 
+    smoother   = 1.0,
+    priors     = t(mysvd),
+    sparEpsilon = sparsenessParam ) 
+emat1 = matrix( eanat[1,], nrow = 100 ) 
+print( paste("sparseness1",sum(abs(eanat[1,])>0)/sum(mask==1) ))
+image( emat1 )
+emat2 = matrix( eanat[2,], nrow = 100 )
+image( emat2 )
+print( paste("sparseness2",sum(abs(eanat[2,])>0)/sum(mask==1) ))
+emat3 = matrix( eanat[3,], nrow = 100 )
+image( emat3 )
+print( paste("sparseness3",sum(abs(eanat[3,])>0)/sum(mask==1) ))
+```
+
 Try some neuroimaging data.
 
 ```{r nimgdata,eval=TRUE}
@@ -141,7 +165,7 @@ Now set up dim red.
 ```{r boldmat,eval=TRUE}
 set.seed( 11 )
 bmat = timeseries2matrix( sbold, bmsk )
-cc   = compcor( bmat, 20, variance_extreme = 0.1 )
+cc   = compcor( bmat, 10, variance_extreme = 0.1 )
 rbmat = residuals( lm( bmat ~ cc ) )
 nc   = 10
 bica = fastICA( t( rbmat ), nc )
