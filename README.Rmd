@@ -126,7 +126,7 @@ print( paste("sparseness3",sum(abs(eanat[3,])>0)/sum(mask==1) ))
 
 Try some neuroimaging data.
 
-```{r nimgdata,eval=TRUE}
+```{r nimgdata,eval=FALSE}
 boldfn = getANTsRData( "rsbold" )
 bold   = antsImageRead( boldfn )
 sbold  = smoothImage( bold, c( rep(6,3),1),
@@ -138,7 +138,7 @@ plot( boldavg, axis=3 )
 
 Now set up dim red.
 
-```{r boldmat,eval=TRUE}
+```{r boldmat,eval=FALSE}
 set.seed( 11 )
 bmat = timeseries2matrix( sbold, bmsk )
 cc   = compcor( bmat, 12 )
@@ -149,7 +149,7 @@ bica = fastICA( t( rbmat ), nc )
 
 View a component.
 
-```{r viewicabold,eval=TRUE}
+```{r viewicabold,eval=FALSE}
 k = 9
 bicaVec = bica$S[,k]
 bicaVec = bicaVec * sign( quantile( bicaVec )[3] )
@@ -162,21 +162,21 @@ plot( boldavg, bicaImg , window.overlay=c(0.1,1), axis=3 )
 
 Eanat with this data.
 
-```{r boldEanat,eval=TRUE}
+```{r boldEanat,eval=FALSE}
 sparsenessParam = (range( abs( bica$S ) ) * 0.0001 )[ 2 ] 
 eanat<-eanatDef( 
     inmat      = scale( rbmat ),
     mask       = bmsk, 
-    smoother   = 1.5,
+    smoother   = 1.0,
     cthresh    = 10,
-    positivity = FALSE,
+    positivity = FALSE, its=25,
     priors     = t(bica$S), verbose=T, priorWeight = 0.5,
     sparEpsilon = sparsenessParam ) 
 ```
 
 View  all of the Eanat components in BOLD space.
 
-```{r boldEanatView,eval=TRUE}
+```{r boldEanatView,eval=FALSE}
 for ( k in 1:nc )
   {
   tempvec = eanat[k,]
