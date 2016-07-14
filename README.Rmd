@@ -1,0 +1,109 @@
+---
+title: "Blind Source Separation Example"
+author: "Brian B. Avants"
+date: "July 14, 2016"
+output: html_document
+---
+
+# blindSourceSeparationInANTsR
+
+play around with simple blind source separation examples with images
+
+```{r simulateData}
+library( ANTsR )
+library( fastICA )
+# recreation of "boxes" dataset in daubechies pnas 2009 and calhoun plos one 2013
+V <- matrix(rep(1, 100*100), nrow=100)
+v1 <- c(11, 40, 21, 70)
+v2 <- c(31, 80, 41, 80)
+v1.length <- length(V[v1[1]:v1[2], v1[3]:v1[4]])
+c1 <- V
+c1[ , ] <- rlogis(length(c(V)), location=-1, scale=1)
+c1[v1[1]:v1[2], v1[3]:v1[4]] <- rlogis(v1.length, location=2, scale=1)
+c2 <- V
+c2[ , ] <- rlogis(length(c(V)), location=-1, scale=1)
+v2.length <- length(V[v2[1]:v2[2], v2[3]:v2[4]])
+c2[v2[1]:v2[2], v2[3]:v2[4]] <- rlogis(v2.length, location=2, scale=1)
+###############################################################
+X1 <- 0.5*c1 + 0.5*c2
+X2 <- 0.3*c1 + 0.7*c2
+X3 <- 0.4*c1 + 0.6*c2
+X4 <- 0.8*c1 + 0.2*c2
+X5 <- 0.25*c1 + 0.45*c2
+X6 <- 0.6*c1 + 0.7*c2
+ica.mat <- matrix( 
+  c( c(X1), c(X2), 
+     c(X3), c(X4),
+     c(X5), c(X6) ), nrow=6, byrow=T )
+```
+
+
+Set up dimensionality reduction.
+```{r setup}
+mask = makeImage( c(100,100), 1 )
+ilist = matrixToImages( ica.mat, mask )
+```
+
+Run ICA on the matrix.
+
+```{r tryICA}
+nc = 3
+myica2 <- fastICA( t( ica.mat ), n.comp = nc, verbose = F )
+image(matrix(myica2$S[, nc], nrow=100, byrow=F))
+image(matrix(myica2$S[, 2], nrow=100, byrow=F))
+image(matrix(myica2$S[, 1], nrow=100, byrow=F))
+```
+
+
+Now let us initialize eigenanatomy with the ICA solution 
+and use eanat to refine the results.
+
+```{r tryEanatWithICA}
+################
+initlist<-list()
+for ( i in 1:nc ) {
+  initlist[[ i ]] = makeImage( mask, myica2$S[, i] )
+}
+eanat<-sparseDecom( 
+  inmatrix   = scale(ica.mat), 
+  inmask     = mask,  
+  sparseness = -0.5, 
+  nvecs      = nc, 
+  smooth     = 0.5, 
+  cthresh    = 100,
+  mycoption  = 0, 
+  initializationList = initlist,
+  priorWeight = 1 )$eigenanatomyimages 
+emat1 = matrix( eanat[1,], nrow = 100 ) 
+print( paste("sparseness1",sum(abs(eanat[1,])>0)/sum(mask==1) ))
+image( emat1 )
+emat2 = matrix( eanat[2,], nrow = 100 )
+image( emat2 )
+print( paste("sparseness2",sum(abs(eanat[2,])>0)/sum(mask==1) ))
+emat3 = matrix( eanat[3,], nrow = 100 )
+image( emat3 )
+print( paste("sparseness3",sum(abs(eanat[3,])>0)/sum(mask==1) ))
+```
+
+Use our deflation-based algorithm which has fewer 
+necessary parameters.
+
+```{r tryDefEanatWithICA}
+sparsenessParam = (range( abs( myica2$S ) ) * 0.002 )[ 2 ] 
+eanat<-eanatDef( 
+    inmat      = scale( ica.mat ),
+    mask       = mask, 
+    smoother   = 1.0,
+    priors     = t(myica2$S),
+    sparEpsilon = sparsenessParam ) 
+emat1 = matrix( eanat[1,], nrow = 100 ) 
+print( paste("sparseness1",sum(abs(eanat[1,])>0)/sum(mask==1) ))
+image( emat1 )
+emat2 = matrix( eanat[2,], nrow = 100 )
+image( emat2 )
+print( paste("sparseness2",sum(abs(eanat[2,])>0)/sum(mask==1) ))
+emat3 = matrix( eanat[3,], nrow = 100 )
+image( emat3 )
+print( paste("sparseness3",sum(abs(eanat[3,])>0)/sum(mask==1) ))
+```
+
