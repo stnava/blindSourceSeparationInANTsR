@@ -7,7 +7,7 @@ output: html_document
 
 # blindSourceSeparationInANTsR
 
-play around with simple blind source separation examples with images
+play around with simple blind source separation examples with images.   see results via [this link](https://htmlpreview.github.io/?https://github.com/stnava/blindSourceSeparationInANTsR/blob/master/README.html).
 
 ```{r simulateData}
 library( ANTsR )
