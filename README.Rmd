@@ -12,6 +12,7 @@ play around with simple blind source separation examples with images.   see resu
 ```{r simulateData}
 library( ANTsR )
 library( fastICA )
+library( Matrix )
 # recreation of "boxes" dataset in daubechies pnas 2009 and calhoun plos one 2013
 V <- matrix(rep(1, 100*100), nrow=100)
 v1 <- c(11, 40, 21, 70)
@@ -57,8 +58,7 @@ for ( i in ilist ) {
 Run ICA on the matrix.
 
 ```{r tryICA}
-nc = 3
-mysvd <- svd( scale(ica.mat), nu=0, nv=nc )$v
+nc = 2
 myica2 <- fastICA( t( ica.mat ), n.comp = nc, verbose = F )
 image(matrix(myica2$S[, nc], nrow=100, byrow=F))
 image(matrix(myica2$S[, 2], nrow=100, byrow=F))
@@ -75,7 +75,7 @@ initlist<-list()
 for ( i in 1:nc ) {
   initlist[[ i ]] = makeImage( mask, myica2$S[, i]*-1 )
 }
-sicamat = scale(ica.mat)
+sicamat = scale( ica.mat )
 eanatStruct <- sparseDecom( 
   inmatrix   = sicamat, 
   inmask     = mask,
@@ -97,9 +97,6 @@ image( emat1 )
 emat2 = matrix( eanat[2,], nrow = 100 )
 image( emat2 )
 print( paste("sparseness2",sum(abs(eanat[2,])>0)/sum(mask==1) ))
-emat3 = matrix( eanat[3,], nrow = 100 )
-image( emat3 )
-print( paste("sparseness3",sum(abs(eanat[3,])>0)/sum(mask==1) ))
 ```
 
 Use our deflation-based algorithm which has fewer 
@@ -120,37 +117,85 @@ image( emat1 )
 emat2 = matrix( eanat[2,], nrow = 100 )
 image( emat2 )
 print( paste("sparseness2",sum(abs(eanat[2,])>0)/sum(mask==1) ))
-emat3 = matrix( eanat[3,], nrow = 100 )
-image( emat3 )
-print( paste("sparseness3",sum(abs(eanat[3,])>0)/sum(mask==1) ))
 ```
 
 
-
-Use our deflation-based algorithm with SVD-based initialization.
+Use our deflation-based algorithm with multi-scale SVD-based initialization.  Actually, we just use a single scale here.
 
 ```{r tryDefEanatWithSVD}
-sparsenessParam = (range( abs( mysvd ) ) * 0.01 )[ 2 ] 
-eanat<-eanatDef( 
-    inmat      = scale( ica.mat ),
-    mask       = mask, 
-    smoother   = 1.0,
-    priors     = t(mysvd),
-    sparEpsilon = sparsenessParam ) 
-emat1 = matrix( eanat[1,], nrow = 100 ) 
-print( paste("sparseness1",sum(abs(eanat[1,])>0)/sum(mask==1) ))
-image( emat1 )
-emat2 = matrix( eanat[2,], nrow = 100 )
-image( emat2 )
-print( paste("sparseness2",sum(abs(eanat[2,])>0)/sum(mask==1) ))
-emat3 = matrix( eanat[3,], nrow = 100 )
-image( emat3 )
-print( paste("sparseness3",sum(abs(eanat[3,])>0)/sum(mask==1) ))
+dtype = "cov"
+icaCorSparse = sparseDistanceMatrix( (ica.mat), k = 250, kmetric = dtype, eps = 0.0 )
+# mysvdFull = irlba::partial_eigen( icaCorSparse, nc*2 ); mysvd = mysvdFull$vec
+mysvdFull = irlba::irlba( icaCorSparse, nc*2 ); mysvd = mysvdFull$v
+sparsenessParam = ( range( abs( mysvd ) ) * 0.002 )[ 2 ]
+sparsenessParam = 1e-4
+if ( T )
+  eanat<-eanatDef( 
+      inmat      = scale( ica.mat ),
+      mask       = mask, 
+      smoother   = 1.0, cthresh=1000,
+      priors     = t(mysvd),
+      sparEpsilon = sparsenessParam ) else eanat = t( mysvd )
+for ( i in 1:nrow( eanat ) )
+  {
+  emat1 = matrix( eanat[i,], nrow = 100 ) 
+  print( paste("sparseness1",sum(abs(eanat[i,])>sparsenessParam)/sum(mask==1) ))
+  image( emat1 )
+  Sys.sleep( 1 )
+  }
 ```
 
 Try some neuroimaging data.
 
-```{r nimgdata,eval=TRUE}
+```{r r16}
+img = antsImageRead( getANTsRData( 'r16') )
+ilist = list(
+  antsImageRead( getANTsRData( 'r27') ),
+  antsImageRead( getANTsRData( 'r30') ),
+  antsImageRead( getANTsRData( 'r62') ),
+  antsImageRead( getANTsRData( 'r64') ),
+  antsImageRead( getANTsRData( 'r85') ) )
+rlist = list( )
+for ( i in 1:length( ilist ) ) {
+  temp = antsRegistration( img, ilist[[i]], typeofTransform = "SyN" )
+  jacobian = createJacobianDeterminantImage( img, temp$fwdtransforms[[1]], 1)
+  rlist[[ i ]] = jacobian 
+  rlist[[ i ]] = temp$warpedmov 
+  }
+imask = getMask( img )
+mat   = imageListToMatrix( rlist, imask )
+```
+
+Run a population eigenanatomy with multi-res SVD initialization.
+
+```{r qreanat,message=FALSE,warning=FALSE,results='hide'}
+# here is an efficient way to make a sparse matrix and get its SVD
+myk = 200
+icaCorSparse = sparseDistanceMatrix( mat, myk, kmetric=dtype )
+mysvdFull = irlba::partial_eigen( icaCorSparse, 4 )
+mysvd = mysvdFull$vec
+sparsenessParam = ( range( abs( mysvd ) ) * 0.00001 )[ 2 ]
+sparsenessParam = 1e-6
+if ( T )
+  eanat<-eanatDef( 
+      inmat      = mat,
+      mask       = imask, 
+      smoother   = 1.0, its=5,
+      priors     = t(mysvd), priorWeight = 0.0,
+      sparEpsilon = sparsenessParam ) else {
+        eanat = t( mysvd )
+        bica = fastICA( t(mat), 4 )
+#        eanat = t( bica$S ) 
+      }
+eilist = matrixToImages( eanat, imask )
+eseg = eigSeg( imask, eilist )
+plot( img, eseg )
+```
+
+
+Try BOLD functional data.
+
+```{r nimgdata,eval=FALSE}
 boldfn = getANTsRData( "rsbold" )
 bold   = antsImageRead( boldfn )
 sbold  = smoothImage( bold, c( rep(6,3),1),
@@ -162,20 +207,25 @@ plot( boldavg, axis=3 )
 
 Now set up dim red.
 
-```{r boldmat,eval=TRUE}
+```{r boldmat,eval=FALSE}
 set.seed( 11 )
 bmat = timeseries2matrix( sbold, bmsk )
 cc   = compcor( bmat, 10, variance_extreme = 0.1 )
 rbmat = residuals( lm( bmat ~ cc ) )
 nc   = 10
-bica = fastICA( t( rbmat ), nc )
+# bica = fastICA( t( rbmat ), nc )
+myk = 1000
+icaCorSparse = sparseDistanceMatrix( rbmat, myk, 
+  kmetric=dtype, eps=0.01 )
+mysvdFull = irlba::irlba( icaCorSparse, 10 )
+bica = mysvdFull$v
 ```
 
 View a component.
 
-```{r viewicabold,eval=TRUE}
-k = 9
-bicaVec = bica$S[,k]
+```{r viewicabold,eval=FALSE}
+k = 10
+bicaVec = bica[,k]
 bicaVec = bicaVec * sign( quantile( bicaVec )[3] )
 qbv     = quantile( bicaVec,  0.99 )
 bicaVec[ bicaVec > qbv ] = qbv
@@ -186,21 +236,22 @@ plot( boldavg, bicaImg , window.overlay=c(0.1,1), axis=3 )
 
 Eanat with this data.
 
-```{r boldEanat,eval=TRUE}
-sparsenessParam = (range( abs( bica$S ) ) * 0.00001 )[ 2 ] 
+```{r boldEanat,eval=FALSE}
+sparsenessParam = 5.e-3
 eanat<-eanatDef( 
     inmat      = scale( rbmat ),
-    mask       = bmsk, 
+    mask       = bmsk,
     smoother   = 1.0,
     cthresh    = 10,
     positivity = FALSE,
-    priors     = t(bica$S), verbose=T, priorWeight = 0.5,
+    priors     = t(bica), verbose=T, priorWeight = 0.0,
     sparEpsilon = sparsenessParam ) 
+eseg = eigSeg( mask = bmsk, imgList = matrixToImages( eanat, bmsk ) )
 ```
 
 View  all of the Eanat components in BOLD space.
 
-```{r boldEanatView,eval=TRUE}
+```{r boldEanatView,eval=FALSE}
 for ( k in 1:nc )
   {
   tempvec = eanat[k,]
@@ -209,6 +260,52 @@ for ( k in 1:nc )
   plot( boldavg, eimg , window.overlay=c(0.1,1), axis=3 )
   Sys.sleep( 2 )
   }
+```
+
+
+
+Let us look the eigenvalue spectrum over scale.
+
+```{r boldsvdscale,eval=FALSE}
+bmat = timeseries2matrix( bold, bmsk )
+tbmat = t( bmat )
+bknn  = get.knn( t(bmat), k=100, algo="CR" )
+# how do we compute "fast" correlations ...
+# 
+temp = svd( bmat )$d
+dscales = 1:12
+dmat = matrix( nrow=length( dscales )+1, 
+               ncol = length( temp ) )
+dmat[1,] = temp
+for ( s in dscales )
+  {
+  sigma = as.numeric( s )
+  sbold  = smoothImage( bold, c( rep(sigma,3), 1.0 ),
+    sigmaInPhysicalCoordinates = TRUE, FWHM = TRUE )
+  bmat = timeseries2matrix( sbold, bmsk )
+  rbmat = residuals( lm( bmat ~ cc ) )
+  dmat[ s+1, ] = svd( rbmat )$d
+  }
+row.names( dmat ) = c( 0, dscales )
+pheatmap::pheatmap( dmat[2:(length(dscales)+1),2:10],
+                    cluster_rows=F, cluster_cols=F )
+```
+
+The eigenvalues fall off rapidly after scale 3.
+
+
+Let us investigate the N-sphere.
+
+```{r nsphere}
+sphereDim = 200
+sphereData = pracma::rands( 50000, sphereDim )
+mysvd = svd( sphereData )
+plot( ts( mysvd$d ) )
+sphereLoCov = sparseDistanceMatrix( sphereData, k = 50, kmetric = "cov", eps = 0.0 )
+mysvdLoCov = irlba::partial_eigen( sphereLoCov, n = 5 )
+plot( ts( mysvdLoCov$values ) )
+# mysvdLoCov = irlba::irlba( sphereLoCov, nv = 10 )
+# plot( ts( mysvdLoCov$d ) )
 ```
 
 Done!
