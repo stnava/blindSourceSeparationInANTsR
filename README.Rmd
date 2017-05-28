@@ -85,21 +85,21 @@ initlist<-list()
 for ( i in 1:nc ) {
   initlist[[ i ]] = makeImage( mask, myica2$S[, i]*-1 )
 }
-sicamat = scale( ica.mat )
+sicamat = icawhiten( ica.mat, 4 )
 eanatStruct <- sparseDecom( 
   inmatrix   = sicamat, 
   inmask     = mask,
-  sparseness = -0.5, # set this explicitly, negative
+  sparseness = 0.75, # set this explicitly, negative
   # values allow signed pseudo-eigenvectors in results
   nvecs      = nc,
-  smooth     = 3,  # components will be smooth
+  smooth     = 1.5,  # components will be smooth
   # negative values use edge-preserving methods (WIP)
-  cthresh    = 500,  # get large components
-  its        = 20,   # optimize for a "long" time
-  mycoption  = 2,    # this controls orthogonality constraints
+  cthresh    = 50,  # get large components
+  its        = 25,   # optimize for a "long" time
+  mycoption  = 0, maxBased = T )   # this controls orthogonality constraints
   # leave as exercise to test other options
-  initializationList = initlist,
-  priorWeight = 10 )
+#  initializationList = initlist,
+#  priorWeight = 10 , maxBased = T )
 eanat = eanatStruct$eigenanatomyimages 
 emat1 = matrix( eanat[1,], nrow = 100 ) 
 print( paste("sparseness1",sum(abs(eanat[1,])>0)/sum(mask==1) ))
@@ -116,9 +116,9 @@ in this example.
 ```{r tryDefEanatWithICA}
 sparsenessParam = (range( abs( myica2$S ) ) * 0.002 )[ 2 ] 
 eanat<-eanatDef( 
-    inmat      = scale( ica.mat ),
+    inmat      = sicamat,
     mask       = mask, 
-    smoother   = 3.0,
+    smoother   = 1.0,
     priors     = t(myica2$S),
     sparEpsilon = sparsenessParam ) 
 emat1 = matrix( eanat[1,], nrow = 100 ) 
@@ -134,7 +134,7 @@ Use our deflation-based algorithm with multi-scale SVD-based initialization.  Ac
 
 ```{r tryDefEanatWithSVD}
 dtype = "cov"
-icaCorSparse = sparseDistanceMatrix( (ica.mat), k = 250, kmetric = dtype, eps = 0.0 )
+icaCorSparse = sparseDistanceMatrix( sicamat, k = 250, kmetric = dtype, eps = 0.0 )
 # mysvdFull = irlba::partial_eigen( icaCorSparse, nc*2 ); mysvd = mysvdFull$vec
 mysvdFull = irlba::irlba( icaCorSparse, nc*2 ); mysvd = mysvdFull$v
 sparsenessParam = ( range( abs( mysvd ) ) * 0.002 )[ 2 ]
@@ -181,7 +181,7 @@ Run a population eigenanatomy with multi-res SVD initialization.
 ```{r qreanat,message=FALSE,warning=FALSE,results='hide'}
 # here is an efficient way to make a sparse matrix and get its SVD
 myk = 200
-icaCorSparse = sparseDistanceMatrix( mat, myk, kmetric=dtype )
+icaCorSparse = sparseDistanceMatrix( icawhiten( mat, 4 ) , myk, kmetric=dtype )
 mysvdFull = irlba::partial_eigen( icaCorSparse, 4 )
 mysvd = mysvdFull$vec
 sparsenessParam = ( range( abs( mysvd ) ) * 0.00001 )[ 2 ]
