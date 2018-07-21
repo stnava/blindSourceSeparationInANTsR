@@ -71,13 +71,12 @@ Try robust PCA>
 
 ```{r robustPCA}
 library( rsvd )
-myrpca <- rrpca( (ica.mat), k=2, p=10, q=3, svdalg='rsvd', trace=TRUE)
+myrpca <- rrpca( (ica.mat),  p=10, q=3,  trace=FALSE )
 image(matrix(myrpca$S[2, ], nrow=100, byrow=F))
 image(matrix(myrpca$S[4,], nrow=100, byrow=F))
 ```
 
-Now let us initialize eigenanatomy with the ICA solution 
-and use eanat to refine the results.
+Now let us initialize eigenanatomy with an ICA-like approach.
 
 ```{r tryEanatWithICA}
 ################
@@ -94,9 +93,11 @@ eanatStruct <- sparseDecom(
   nvecs      = nc,
   smooth     = 1.5,  # components will be smooth
   # negative values use edge-preserving methods (WIP)
-  cthresh    = 50,  # get large components
+  cthresh    = 0,  # get large components
   its        = 25,   # optimize for a "long" time
-  mycoption  = 0, maxBased = T )   # this controls orthogonality constraints
+  mycoption  = 0,  # this controls orthogonality constraints
+  maxBased = T,    # faster sparseness calculation
+  verbose=T ) 
   # leave as exercise to test other options
 #  initializationList = initlist,
 #  priorWeight = 10 , maxBased = T )
@@ -207,7 +208,7 @@ Now try robust pca again ...
 
 ```{r rpcabrain}
 library( rsvd )
-myrpca <- rrpca( mat, k=2, p=10, q=3, svdalg='rsvd', trace=TRUE)
+myrpca <- rrpca( mat,  p=10, q=3 )
 reilist = matrixToImages( myrpca$S, imask )
 eseg = eigSeg( imask, reilist )
 k=5
@@ -389,7 +390,7 @@ for ( i in 2:ncol(mresponse) )
 
 Now, similar to above but use the number of nearest k neighbors instead of radius.
 
-```{r mssvdk}
+```{r mssvdk,eval=FALSE,echo=FALSE}
 rm( fullCov )
 distmat = ( as.matrix( dist( spherEmbed ) ) )
 nev = sphereDim+3
